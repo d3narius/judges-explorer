@@ -85,7 +85,12 @@
           <text x="${X3 + 12}" y="${l.y + 36}" font-size="11.5" fill="#6b6860">${esc(clip(l.sub || "", 48))}</text></g>`;
       });
     });
-    return `<div class="scroll-x">${s}</svg></div>`;
+    // Phones get the same map as an indented outline instead of a wide drawing
+    const outline = `<div class="outline phone-only"><div class="o-root">${esc(centerTitle)}<small>${esc(centerSub || "")}</small></div>` +
+      branches.map(b => `<div class="o-branch" style="--c:${b.color}"><div class="o-label">${esc(b.label)} (${b.leaves.length})</div>` +
+        b.leaves.map(l => `<button class="o-leaf" style="--c:${l.color || b.color}" data-act="${l.act}" data-arg="${esc(l.arg)}">${esc(l.title)}<small>${esc(l.sub || "")}</small></button>`).join("") +
+        "</div>").join("") + "</div>";
+    return `<div class="scroll-x desk-only">${s}</svg></div>${outline}`;
   }
 
   // Verse references such as 3:10 or 13:3–5 become links to the chapter view
@@ -137,10 +142,14 @@
     });
     s += "</svg>";
     $("#view").innerHTML = `<h1>Timeline of the judges</h1>
-      <p class="muted">Every period whose length the text states, in book order. Hover or focus a bar for the wording and verse; click to open the character.</p>
-      <div class="card"><div class="scroll-x">${s}</div>
+      <p class="muted">Every period whose length the text states, in book order. Hover or tap a bar for the wording and verse; select a name to open the character.</p>
+      <div class="card"><div class="scroll-x desk-only">${s}</div>
+      <div class="phone-only">${lanes.map((j, i) => `<div class="tl-row"><a href="#/characters/${j.id}">${esc(j.name)}</a> <span class="muted">Judges ${j.segs[0].ref}</span>
+        <div class="tl-track">${j.segs.map((g, k) => g.years
+          ? `<button class="tl-seg tl-bar" data-i="${i}" data-k="${k}" style="width:${(100 * g.years / maxT).toFixed(1)}%;background:${col[g.type]}" aria-label="${esc(g.label)}, ${g.years} years">${g.years >= 7 ? g.years + "y" : ""}</button>`
+          : `<span class="muted">No length stated (${g.ref})</span>`).join("")}</div></div>`).join("")}</div>
       <div class="legend"><span><i style="background:#c2410c"></i>Israel under another nation</span><span><i style="background:#0f766e"></i>The land has rest or is quiet</span><span><i style="background:#185fa5"></i>Judged Israel</span><span><i style="background:#8a877e"></i>Reigned over Israel</span></div>
-      <div class="tl-info" id="tlinfo"><span class="muted">Hover a bar.</span></div></div>
+      <div class="tl-info" id="tlinfo"><span class="muted">Hover or tap a bar for details.</span></div></div>
       <p class="muted">Each row starts at zero. The text gives these lengths but no dates, so the rows are not placed against one another.</p>`;
     const info = $("#tlinfo");
     const show = el => {
@@ -150,7 +159,8 @@
     $("#view").querySelectorAll(".tl-bar").forEach(el => {
       el.addEventListener("mouseenter", () => show(el));
       el.addEventListener("focus", () => show(el));
-      el.addEventListener("click", () => { location.hash = "#/characters/" + el.dataset.go; });
+      // On phones a tap shows the details; the name link opens the character
+      el.addEventListener("click", () => { if (el.classList.contains("tl-seg")) show(el); else location.hash = "#/characters/" + el.dataset.go; });
       el.addEventListener("keydown", e => { if (e.key === "Enter") location.hash = "#/characters/" + el.dataset.go; });
     });
   }
@@ -280,11 +290,11 @@
       : `<span class="muted">Pick a chapter to see its distinctive words.</span>`;
     $("#view").innerHTML = `<h1>Word frequency: ${n ? "Judges " + n : "whole book"}</h1>
       <p class="muted">Click a word to see its verses.${n ? ` <a href="#/chapters/${n}">Open the chapter map</a>.` : ""}${key ? " Distinctive words appear far more often here than in the rest of the book." : ""}</p>
-      <div class="chips">${chips}</div>
+      <div class="chips picker">${chips}</div>
       <div class="row">${modes}</div>
       <div class="row"><a class="chip ${stop ? "on" : ""}" href="${url(n, { all: false })}">Hide common words</a><a class="chip ${stop ? "" : "on"}" href="${url(n, { all: true })}">Show all words</a><a class="chip ${merge ? "on" : ""}" href="${url(n, { merge: !merge })}">Merge plurals</a></div>
       <div class="stats"><div class="stat"><b>${total.toLocaleString()}</b><span>words</span></div><div class="stat"><b>${list.length.toLocaleString()}</b><span>distinct${stop ? " (without common)" : ""}</span></div><div class="stat"><b>${esc(ranked[0].text)}</b><span>${key ? `most distinctive (${ranked[0].count})` : `most frequent (${ranked[0].count})`}</span></div></div>
-      <div class="card">${cloudSVG(top, 900, 420)}</div>
+      <div class="card">${matchMedia("(max-width: 600px)").matches ? cloudSVG(top.slice(0, 45), 360, 460) : cloudSVG(top, 900, 420)}</div>
       <h2>Top 25${key ? " distinctive" : ""}</h2><div class="card"><div class="bars">${bars.map(w => `<span class="lbl" data-act="word" data-arg="${esc(w.text)}">${esc(w.text)}</span><div><div class="bar" style="width:${(100 * wt(w) / max).toFixed(1)}%"></div></div><span>${w.count}${key ? ` · ${w.ratio >= 99 ? "only here" : "×" + w.ratio.toFixed(1)}` : ""}</span>`).join("")}</div></div>
       <div id="hits"></div>`;
     $("#view").dataset.scope = chs.join(",");
@@ -336,7 +346,7 @@
       body += `<span class="verse" data-v="${x.v}" id="v${x.v}"><sup>${x.v}</sup>${esc(x.t)} </span>`;
     });
     $("#view").innerHTML = `<h1>Judges ${n}</h1><p>${refLinks(C.chapterSummaries[n - 1])}</p>
-      <div class="chips">${V.map(c => `<a class="chip ${c.n === n ? "on" : ""}" href="#/chapters/${c.n}">${c.n}</a>`).join("")}</div>
+      <div class="chips picker">${V.map(c => `<a class="chip ${c.n === n ? "on" : ""}" href="#/chapters/${c.n}">${c.n}</a>`).join("")}</div>
       <p class="muted"><a href="#/words/${n}">Word frequency for this chapter</a></p>
       <h2>Chapter map</h2><div class="card">${map}</div><div id="panel"></div>
       <h2>Text (${LABEL})</h2><div class="card verses" id="text">${body}</div>`;
@@ -395,6 +405,11 @@
       case "search": viewSearch(decodeURIComponent(parts.slice(1).join("/"))); break;
       default: viewTimeline();
     }
+    // keep the selected chapter visible in a sideways-scrolling picker
+    document.querySelectorAll(".picker").forEach(p => {
+      const on = p.querySelector(".chip.on");
+      if (on) p.scrollLeft = on.offsetLeft - p.offsetLeft - p.clientWidth / 2 + on.offsetWidth / 2;
+    });
   }
   window.addEventListener("hashchange", route);
 
