@@ -87,9 +87,9 @@
     });
     // Phones get the same map as an indented outline instead of a wide drawing
     const outline = `<div class="outline phone-only"><div class="o-root">${esc(centerTitle)}<small>${esc(centerSub || "")}</small></div>` +
-      branches.map(b => `<div class="o-branch" style="--c:${b.color}"><div class="o-label">${esc(b.label)} (${b.leaves.length})</div>` +
+      branches.map(b => `<div class="o-branch" style="--c:${b.color}"><div class="o-label">${esc(b.label)} (${b.leaves.length})</div><div class="o-leaves">` +
         b.leaves.map(l => `<button class="o-leaf" style="--c:${l.color || b.color}" data-act="${l.act}" data-arg="${esc(l.arg)}">${esc(l.title)}<small>${esc(l.sub || "")}</small></button>`).join("") +
-        "</div>").join("") + "</div>";
+        "</div></div>").join("") + "</div>";
     return `<div class="scroll-x desk-only">${s}</svg></div>${outline}`;
   }
 
@@ -114,17 +114,14 @@
 
   // ---------- views ----------
   function viewTimeline() {
-    // Each lane starts at zero: the text gives lengths, not dates or overlaps
-    const lanes = C.timeline.map(j => {
-      let x = 0;
-      const segs = j.segs.map(s => { const o = { ...s, start: x }; x += s.years || 0; return o; });
-      return { ...j, segs, total: x };
-    });
-    const maxT = Math.max(...lanes.map(j => j.total)), W = 980, L = 190, R = 24, TOP = 36, LH = 38;
+    // Stated lengths laid end to end in book order; a period with no stated length takes no space
+    let x = 0;
+    const lanes = C.timeline.map(j => ({ ...j, segs: j.segs.map(s => { const o = { ...s, start: x }; x += s.years || 0; return o; }) }));
+    const maxT = x, W = 980, L = 190, R = 24, TOP = 36, LH = 38;
     const sc = (W - L - R) / maxT, H = TOP + lanes.length * LH + 16;
     const col = { foreign: "#c2410c", rest: "#0f766e", judged: "#185fa5", reign: "#8a877e" };
-    let s = `<svg viewBox="0 0 ${W} ${H}" style="min-width:720px;width:100%;display:block" role="img" aria-label="Stated years for each judge">`;
-    for (let t = 0; t <= maxT; t += 20) {
+    let s = `<svg viewBox="0 0 ${W} ${H}" style="min-width:720px;width:100%;display:block" role="img" aria-label="Timeline of stated years">`;
+    for (let t = 0; t <= maxT; t += 50) {
       const px = L + t * sc;
       s += `<line x1="${px}" y1="${TOP - 8}" x2="${px}" y2="${H - 10}" stroke="#e4e1d8"/><text x="${px}" y="${TOP - 14}" text-anchor="middle" font-size="11" fill="#6b6860">${t}</text>`;
     }
@@ -137,7 +134,7 @@
         s += `<g class="tl-bar" tabindex="0" data-i="${i}" data-k="${k}" data-go="${j.id}">` + (g.years
           ? `<rect x="${bx}" y="${y + 6}" width="${bw}" height="24" rx="4" fill="${col[g.type]}"/>
             ${bw > 30 ? `<text x="${bx + bw / 2}" y="${y + 22}" text-anchor="middle" font-size="11.5" fill="#fff">${g.years}y</text>` : ""}`
-          : `<text x="${bx + 4}" y="${y + 22}" font-size="12" fill="#6b6860">No length stated (${g.ref})</text>`) + "</g>";
+          : `<line x1="${bx}" y1="${y + 4}" x2="${bx}" y2="${y + 32}" stroke="#8a877e" stroke-width="2"/><text x="${bx + 6}" y="${y + 22}" font-size="12" fill="#6b6860">No length stated (${g.ref})</text>`) + "</g>";
       });
     });
     s += "</svg>";
@@ -145,16 +142,16 @@
       <p class="muted">Every period whose length the text states, in book order. Hover or tap a bar for the wording and verse; select a name to open the character.</p>
       <div class="card"><div class="scroll-x desk-only">${s}</div>
       <div class="phone-only">${lanes.map((j, i) => `<div class="tl-row"><a href="#/characters/${j.id}">${esc(j.name)}</a> <span class="muted">Judges ${j.segs[0].ref}</span>
-        <div class="tl-track">${j.segs.map((g, k) => g.years
-          ? `<button class="tl-seg tl-bar" data-i="${i}" data-k="${k}" style="width:${(100 * g.years / maxT).toFixed(1)}%;background:${col[g.type]}" aria-label="${esc(g.label)}, ${g.years} years">${g.years >= 7 ? g.years + "y" : ""}</button>`
-          : `<span class="muted">No length stated (${g.ref})</span>`).join("")}</div></div>`).join("")}</div>
+        <div class="tl-track"><span style="width:${(100 * j.segs[0].start / maxT).toFixed(1)}%;flex:none"></span>${j.segs.map((g, k) => g.years
+          ? `<button class="tl-seg tl-bar" data-i="${i}" data-k="${k}" style="width:${(100 * g.years / maxT).toFixed(1)}%;background:${col[g.type]}" aria-label="${esc(g.label)}, ${g.years} years">${g.years >= 20 ? g.years + "y" : ""}</button>`
+          : `<button class="tl-seg tl-bar tl-none" data-i="${i}" data-k="${k}" aria-label="${esc(g.label)}"></button>`).join("")}</div></div>`).join("")}</div>
       <div class="legend"><span><i style="background:#c2410c"></i>Israel under another nation</span><span><i style="background:#0f766e"></i>The land has rest or is quiet</span><span><i style="background:#185fa5"></i>Judged Israel</span><span><i style="background:#8a877e"></i>Reigned over Israel</span></div>
       <div class="tl-info" id="tlinfo"><span class="muted">Hover or tap a bar for details.</span></div></div>
-      <p class="muted">Each row starts at zero. The text gives these lengths but no dates, so the rows are not placed against one another.</p>`;
+      <p class="muted">The stated lengths are placed one after another in book order, so the scale counts stated years, not dates. Shamgar takes no space because the text gives no length.</p>`;
     const info = $("#tlinfo");
     const show = el => {
       const j = lanes[+el.dataset.i], g = j.segs[+el.dataset.k];
-      info.innerHTML = `<b>${esc(j.name)}</b>: ${esc(g.label)}<br><span class="muted">${g.years ? g.years + " years" : "No length stated"} · <a href="#/chapters/${g.ref.split(":")[0]}?v=${g.ref.split(":")[1]}">Judges ${g.ref}</a></span>`;
+      info.innerHTML = `<b>${esc(j.name)}</b>: ${esc(g.label)}<br><span class="muted">${g.years ? `${g.years} years · stated years ${g.start}–${g.start + g.years} on this scale` : "No length stated"} · <a href="#/chapters/${g.ref.split(":")[0]}?v=${g.ref.split(":")[1]}">Judges ${g.ref}</a></span>`;
     };
     $("#view").querySelectorAll(".tl-bar").forEach(el => {
       el.addEventListener("mouseenter", () => show(el));
