@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Judges explorer</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="top">
+  <a class="brand" href="#/timeline">Judges explorer</a>
+  <div class="search">
+    <input id="q" type="search" placeholder="Search verses, characters, places" autocomplete="off" aria-label="Search">
+    <div id="suggest" class="suggest" hidden></div>
+  </div>
+  <select id="ver" class="field" aria-label="Translation" hidden></select>
+</header>
+<nav class="nav" id="nav">
+  <a href="#/timeline" data-r="timeline">Timeline</a>
+  <a href="#/characters" data-r="characters">Characters</a>
+  <a href="#/words" data-r="words">Word frequency</a>
+  <a href="#/chapters/1" data-r="chapters">Chapters</a>
+</nav>
+<main id="view"></main>
+<footer class="foot" id="foot"></footer>
+<script src="data/verses_kjv.js"></script>
+<script src="data/curated.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
