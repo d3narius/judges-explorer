@@ -19,7 +19,6 @@
   const refStr = (ch, v1, v2) => `Judges ${ch}:${v1}` + (v2 && v2 > v1 ? `–${v2}` : "");
   const verseText = (ch, v) => (V[ch - 1].verses.find(x => x.v === v) || {}).t || "";
   const ALL = V.flatMap(c => c.verses.map(x => ({ ch: c.n, v: x.v, t: x.t })));
-  const TYPES = C.types;
 
   const CH = {}, INC = {};
   C.characters.forEach(c => { CH[c.id] = c; c.mentions = {}; c.incidents = []; });
@@ -89,18 +88,19 @@
     return `<div class="scroll-x">${s}</svg></div>`;
   }
 
-  function legendHTML(types) {
-    return `<div class="legend">` + types.map(t => `<span><i style="background:${TYPES[t].color}"></i>${TYPES[t].label}</span>`).join("") + `</div>`;
+  // Verse references such as 3:10 or 13:3–5 become links to the chapter view
+  function refLinks(text) {
+    return esc(text).replace(/\b(\d{1,2}):(\d{1,3})(?:–(\d{1,3}))?/g, (m, ch, a, b) =>
+      +ch >= 1 && +ch <= 21 ? `<a href="#/chapters/${ch}?v=${a}-${b || a}">${m}</a>` : m);
   }
 
   function incidentPanel(id) {
     const i = INC[id];
-    const t = TYPES[i.type];
     let vs = "", n = 0;
     for (let v = i.v1; v <= i.v2 && n < 12; v++, n++) vs += `<sup>${v}</sup>${esc(verseText(i.ch, v))} `;
     const more = i.v2 - i.v1 + 1 > 12 ? ` <a href="#/chapters/${i.ch}?v=${i.v1}-${i.v2}">Read on in chapter view</a>` : "";
     return `<div class="card" id="incident">
-      <div class="row" style="margin:0"><h3 style="margin:0">${esc(i.title)}</h3><span class="chip" style="border-color:${t.color};color:${t.color}">${t.label}</span></div>
+      <h3 style="margin:0">${esc(i.title)}</h3>
       <p class="muted"><a href="#/chapters/${i.ch}?v=${i.v1}-${i.v2}">${refStr(i.ch, i.v1, i.v2)}</a></p>
       <p>${esc(i.summary)}</p>
       ${i.chars.length ? `<div class="chips">${i.chars.map(c => `<a class="chip" href="#/characters/${c}">${esc(CH[c].name)}</a>`).join("")}</div>` : ""}
@@ -109,15 +109,17 @@
 
   // ---------- views ----------
   function viewTimeline() {
-    let x = 0;
-    const lanes = C.timeline.map(j => ({
-      ...j, segs: j.segs.map(s => { const len = s.years || 2, o = { ...s, len, start: x }; x += len; return o; })
-    }));
-    const total = x, W = 980, L = 190, R = 24, TOP = 36, LH = 38;
-    const sc = (W - L - R) / total, H = TOP + lanes.length * LH + 16;
-    const col = { oppression: "#c2410c", rest: "#0f766e", usurper: "#8a877e" };
-    let s = `<svg viewBox="0 0 ${W} ${H}" style="min-width:720px;width:100%;display:block" role="img" aria-label="Timeline of the judges">`;
-    for (let t = 0; t <= total; t += 50) {
+    // Each lane starts at zero: the text gives lengths, not dates or overlaps
+    const lanes = C.timeline.map(j => {
+      let x = 0;
+      const segs = j.segs.map(s => { const o = { ...s, start: x }; x += s.years || 0; return o; });
+      return { ...j, segs, total: x };
+    });
+    const maxT = Math.max(...lanes.map(j => j.total)), W = 980, L = 190, R = 24, TOP = 36, LH = 38;
+    const sc = (W - L - R) / maxT, H = TOP + lanes.length * LH + 16;
+    const col = { foreign: "#c2410c", rest: "#0f766e", judged: "#185fa5", reign: "#8a877e" };
+    let s = `<svg viewBox="0 0 ${W} ${H}" style="min-width:720px;width:100%;display:block" role="img" aria-label="Stated years for each judge">`;
+    for (let t = 0; t <= maxT; t += 20) {
       const px = L + t * sc;
       s += `<line x1="${px}" y1="${TOP - 8}" x2="${px}" y2="${H - 10}" stroke="#e4e1d8"/><text x="${px}" y="${TOP - 14}" text-anchor="middle" font-size="11" fill="#6b6860">${t}</text>`;
     }
@@ -126,26 +128,24 @@
       s += `<a href="#/characters/${j.id}"><text x="${L - 12}" y="${y + 17}" text-anchor="end" font-size="13" font-weight="600" fill="#2b2a27">${esc(j.name)}</text>
         <text x="${L - 12}" y="${y + 31}" text-anchor="end" font-size="11" fill="#6b6860">Judges ${j.segs[0].ref}</text></a>`;
       j.segs.forEach((g, k) => {
-        const bx = L + g.start * sc, bw = Math.max(g.len * sc, 4);
-        s += `<g class="tl-bar" tabindex="0" data-i="${i}" data-k="${k}" data-go="${j.id}">
-          <rect x="${bx}" y="${y + 6}" width="${bw}" height="24" rx="4" fill="${col[g.type]}"/>
-          ${bw > 30 && g.years ? `<text x="${bx + bw / 2}" y="${y + 22}" text-anchor="middle" font-size="11.5" fill="#fff">${g.years}y</text>` : ""}</g>`;
+        const bx = L + g.start * sc, bw = (g.years || 0) * sc;
+        s += `<g class="tl-bar" tabindex="0" data-i="${i}" data-k="${k}" data-go="${j.id}">` + (g.years
+          ? `<rect x="${bx}" y="${y + 6}" width="${bw}" height="24" rx="4" fill="${col[g.type]}"/>
+            ${bw > 30 ? `<text x="${bx + bw / 2}" y="${y + 22}" text-anchor="middle" font-size="11.5" fill="#fff">${g.years}y</text>` : ""}`
+          : `<text x="${bx + 4}" y="${y + 22}" font-size="12" fill="#6b6860">No length stated (${g.ref})</text>`) + "</g>";
       });
     });
     s += "</svg>";
-    const opp = lanes.flatMap(j => j.segs).filter(g => g.type === "oppression").reduce((a, g) => a + g.len, 0);
-    const stats = [[lanes.length, "judge lanes"], [total, "years, stated"], [opp, "years of oppression"], [total - opp, "years of rule and rest"]];
     $("#view").innerHTML = `<h1>Timeline of the judges</h1>
-      <p class="muted">The cycle repeats: Israel sins, is oppressed, cries out, and is delivered. Hover or focus a bar for details; click to open the character.</p>
-      <div class="stats">${stats.map(([n, l]) => `<div class="stat"><b>${n}</b><span>${l}</span></div>`).join("")}</div>
+      <p class="muted">Every period whose length the text states, in book order. Hover or focus a bar for the wording and verse; click to open the character.</p>
       <div class="card"><div class="scroll-x">${s}</div>
-      <div class="legend"><span><i style="background:#c2410c"></i>Oppression</span><span><i style="background:#0f766e"></i>Judge and rest</span><span><i style="background:#8a877e"></i>Usurper</span></div>
+      <div class="legend"><span><i style="background:#c2410c"></i>Israel under another nation</span><span><i style="background:#0f766e"></i>The land has rest or is quiet</span><span><i style="background:#185fa5"></i>Judged Israel</span><span><i style="background:#8a877e"></i>Reigned over Israel</span></div>
       <div class="tl-info" id="tlinfo"><span class="muted">Hover a bar.</span></div></div>
-      <p class="muted">Years are those stated in the text, laid end to end in book order, so the span is relative (year 0 is the start of Othniel's oppression). Some periods likely overlap, for example Samson's Philistine oppression, and Shamgar's length is not given. Dates will be added later.</p>`;
+      <p class="muted">Each row starts at zero. The text gives these lengths but no dates, so the rows are not placed against one another.</p>`;
     const info = $("#tlinfo");
     const show = el => {
       const j = lanes[+el.dataset.i], g = j.segs[+el.dataset.k];
-      info.innerHTML = `<b>${esc(j.name)}</b>: ${esc(g.label)}<br><span class="muted">${g.years ? g.years + " years" : "years not stated"} · year ${g.start} to ${g.start + (g.years || 0)} · <a href="#/chapters/${g.ref.split(":")[0]}?v=${g.ref.split(":")[1]}">Judges ${g.ref}</a></span>`;
+      info.innerHTML = `<b>${esc(j.name)}</b>: ${esc(g.label)}<br><span class="muted">${g.years ? g.years + " years" : "No length stated"} · <a href="#/chapters/${g.ref.split(":")[0]}?v=${g.ref.split(":")[1]}">Judges ${g.ref}</a></span>`;
     };
     $("#view").querySelectorAll(".tl-bar").forEach(el => {
       el.addEventListener("mouseenter", () => show(el));
@@ -162,7 +162,7 @@
         <div class="row"><input class="field" id="cf" placeholder="Filter characters" style="width:260px"></div>
         <div class="grid" id="cgrid"></div>`;
       const draw = f => {
-        $("#cgrid").innerHTML = list.filter(c => !f || (c.name + " " + c.role + " " + c.group).toLowerCase().includes(f))
+        $("#cgrid").innerHTML = list.filter(c => !f || (c.name + " " + c.role).toLowerCase().includes(f))
           .map(c => `<a class="tile" href="#/characters/${c.id}"><b>${esc(c.name)}</b><span>${esc(c.role)} · ${charRefs(c)}</span></a>`).join("");
       };
       draw("");
@@ -177,30 +177,29 @@
       spark += `<a href="#/chapters/${n}" class="${val ? "" : "zero"}" style="height:${val ? Math.max(6, 54 * val / max) : 3}px" title="Judges ${n}: ${val}"></a>`;
       sl += `<span>${n}</span>`;
     }
-    const byType = {};
-    c.incidents.slice().sort((a, b) => a.ch * 1000 + a.v1 - b.ch * 1000 - b.v1).forEach(i => (byType[i.type] = byType[i.type] || []).push(i));
-    const branches = Object.keys(TYPES).filter(t => byType[t]).map(t => ({
-      label: TYPES[t].label, color: TYPES[t].color,
-      leaves: byType[t].map(i => ({ title: i.title, sub: refStr(i.ch, i.v1, i.v2), act: "inc", arg: i.id }))
+    const byCh = {};
+    c.incidents.slice().sort((a, b) => a.ch * 1000 + a.v1 - b.ch * 1000 - b.v1).forEach(i => (byCh[i.ch] = byCh[i.ch] || []).push(i));
+    const branches = Object.keys(byCh).map(Number).sort((a, b) => a - b).map(n => ({
+      label: `Judges ${n}`, color: "#5b4bb7",
+      leaves: byCh[n].map(i => ({ title: i.title, sub: refStr(i.ch, i.v1, i.v2), act: "inc", arg: i.id }))
     }));
     const shared = {};
     c.incidents.forEach(i => i.chars.forEach(o => { if (o !== id) shared[o] = (shared[o] || 0) + 1; }));
     branches.push({
-      label: "Connected people", color: "#6b6860",
+      label: "In the same passages", color: "#0f766e",
       leaves: Object.keys(shared).sort((a, b) => shared[b] - shared[a]).map(o => ({
-        title: CH[o].name, sub: `${CH[o].role} · ${shared[o]} shared incident${shared[o] > 1 ? "s" : ""}`, act: "char", arg: o
+        title: CH[o].name, sub: `${shared[o]} shared passage${shared[o] > 1 ? "s" : ""}`, act: "char", arg: o
       }))
     });
-    const usedTypes = Object.keys(byType);
     $("#view").innerHTML = `<p class="muted"><a href="#/characters">All characters</a></p>
-      <h1>${esc(c.name)}</h1><p class="muted">${esc(c.role)} · ${esc(c.group)} · ${charRefs(c)}</p>
-      <div class="card"><p>${esc(c.summary)}</p>
+      <h1>${esc(c.name)}</h1><p class="muted">${refLinks(c.role)} · ${charRefs(c)}</p>
+      <div class="card"><p>${refLinks(c.summary)}</p>
         <div class="stats"><div class="stat"><b>${c.incidents.length}</b><span>incidents</span></div>
         <div class="stat"><b>${c.chapters.length}</b><span>chapters</span></div>
         ${c.aliases.length ? `<div class="stat"><b>${Object.values(c.mentions).reduce((a, b) => a + b, 0)}</b><span>name mentions</span></div>` : ""}</div>
         <h3>Where ${esc(c.name)} appears</h3><div class="spark">${spark}</div><div class="spark-lbl">${sl}</div>
         <h3>References</h3><div class="chips">${c.incidents.map(i => `<a class="chip" href="#/chapters/${i.ch}?v=${i.v1}-${i.v2}">${refStr(i.ch, i.v1, i.v2)}</a>`).join("") || '<span class="muted">No curated incidents</span>'}</div></div>
-      <h2>Incident mind map</h2>${legendHTML(usedTypes)}
+      <h2>Incident mind map</h2><p class="muted">Passages where ${esc(c.name)} appears, by chapter. Click one to read it.</p>
       <div class="card">${tree(c.name, c.role, branches)}</div><div id="panel"></div>`;
   }
 
@@ -325,7 +324,7 @@
     if (n < 21) links.push({ title: `Next: Judges ${n + 1}`, sub: C.chapterSummaries[n], act: "chap", arg: String(n + 1) });
     const map = tree(`Judges ${n}`, `${ch.verses.length} verses`, [
       { label: "Scenes", color: "#5b4bb7", leaves: ch.derived ? [] : scenes },
-      { label: "Incidents", color: "#b45309", leaves: incs.map(i => ({ title: i.title, sub: refStr(i.ch, i.v1, i.v2), act: "inc", arg: i.id, color: TYPES[i.type].color })) },
+      { label: "Incidents", color: "#b45309", leaves: incs.map(i => ({ title: i.title, sub: refStr(i.ch, i.v1, i.v2), act: "inc", arg: i.id })) },
       { label: "People", color: "#0f766e", leaves: people },
       { label: "Places", color: "#185fa5", leaves: places },
       { label: "Connections", color: "#6b6860", leaves: links }
@@ -336,7 +335,7 @@
       if (sec) body += `<div class="sec">${esc(sec.title)}</div>`;
       body += `<span class="verse" data-v="${x.v}" id="v${x.v}"><sup>${x.v}</sup>${esc(x.t)} </span>`;
     });
-    $("#view").innerHTML = `<h1>Judges ${n}</h1><p>${esc(C.chapterSummaries[n - 1])}</p>
+    $("#view").innerHTML = `<h1>Judges ${n}</h1><p>${refLinks(C.chapterSummaries[n - 1])}</p>
       <div class="chips">${V.map(c => `<a class="chip ${c.n === n ? "on" : ""}" href="#/chapters/${c.n}">${c.n}</a>`).join("")}</div>
       <p class="muted"><a href="#/words/${n}">Word frequency for this chapter</a></p>
       <h2>Chapter map</h2><div class="card">${map}</div><div id="panel"></div>
